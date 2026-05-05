@@ -51,6 +51,19 @@ export async function loginUser(email, password) {
   return res.json()   // { token }
 }
 
+export async function registerUser(name, email, password) {
+  const res = await fetch('/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, password }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(text || 'Registration failed')
+  }
+  return res.json()   // { token }
+}
+
 // ---------------------------------------------------------------------------
 // Devices
 // ---------------------------------------------------------------------------

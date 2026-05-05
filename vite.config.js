@@ -5,10 +5,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/admin':    { target: 'http://localhost:8000', changeOrigin: true },
-      '/sync':     { target: 'http://localhost:8000', changeOrigin: true },
-      '/auth':     { target: 'http://localhost:8081', changeOrigin: true },
-      '/accounts': { target: 'http://localhost:8082', changeOrigin: true },
+      '/admin':    'http://localhost:80',
+      '/sync':     'http://localhost:80',
+      '/auth':     'http://localhost:80',
+      '/accounts': 'http://localhost:80',
     },
   },
 })

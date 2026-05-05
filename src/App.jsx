@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout       from './components/Layout'
 import Login        from './pages/Login'
+import Register     from './pages/Register'
 import Fleet        from './pages/Fleet'
 import Devices      from './pages/Devices'
 import Species      from './pages/Species'
@@ -15,7 +16,8 @@ export default function App() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/login"    element={<Login />} />
+        <Route path="/register" element={<Register />} />
         <Route
           element={
             <ProtectedRoute>
