@@ -1,27 +1,317 @@
 import { useState } from 'react'
-import { useDevices, useCreateDevice, useRotateDeviceToken } from '../api/cloudApi'
-import { Link } from 'react-router-dom'
+import {
+  useDevices, useCreateDevice, useUpdateDevice, useRotateDeviceToken,
+  useUsers, useSensorModels, useActuatorModels,
+  useDeviceSensors, useCreateDeviceSensor, useDeleteDeviceSensor,
+  useDeviceActuators, useCreateDeviceActuator, useDeleteDeviceActuator,
+} from '../api/cloudApi'
 
-export default function Devices() {
-  const { data, isLoading }  = useDevices()
-  const createDevice         = useCreateDevice()
-  const rotateToken          = useRotateDeviceToken()
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function onlineStatus(lastSeenAt, syncIntervalSec = 600) {
+  if (!lastSeenAt) return 'never'
+  const diffSec = (Date.now() - new Date(lastSeenAt).getTime()) / 1000
+  return diffSec < syncIntervalSec * 2 ? 'online' : 'offline'
+}
+
+function StatusBadge({ lastSeenAt }) {
+  const status = onlineStatus(lastSeenAt)
+  const colors = { online: 'text-green-400', offline: 'text-red-400', never: 'text-gray-500' }
+  const labels = { online: '● Online', offline: '● Offline', never: '— Never synced' }
+  return <span className={`text-xs font-medium ${colors[status]}`}>{labels[status]}</span>
+}
+
+function TokenReveal({ data, onDismiss }) {
+  if (!data) return null
+  return (
+    <div className="card border border-yellow-700 space-y-2">
+      <p className="text-sm font-medium text-yellow-400">⚠ Device token — copy now, it won't be shown again</p>
+      <code className="block text-xs bg-gray-800 rounded p-3 break-all text-gray-200">{data.token}</code>
+      <button onClick={onDismiss} className="btn-secondary text-xs">Dismiss</button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Sensor/Actuator management panel (shown in device detail)
+// ---------------------------------------------------------------------------
+
+function SensorsPanel({ deviceId }) {
+  const { data: sensors, isLoading } = useDeviceSensors(deviceId)
+  const { data: models } = useSensorModels()
+  const createSensor  = useCreateDeviceSensor()
+  const deleteSensor  = useDeleteDeviceSensor()
   const [showForm, setShowForm] = useState(false)
-  const [newToken, setNewToken] = useState(null)
-  const [form, setForm]      = useState({ name: '', location: '', device_mode: 'MEDIUM' })
+  const [form, setForm] = useState({ id_sensor_model: '', port_address: '', is_active: true })
 
-  const list = Array.isArray(data) ? data : (data?.data ?? [])
+  const list = Array.isArray(sensors) ? sensors : (sensors?.data ?? [])
+  const modelList = Array.isArray(models) ? models : (models?.data ?? [])
 
-  async function handleCreate(e) {
+  async function handleAdd(e) {
     e.preventDefault()
-    await createDevice.mutateAsync(form)
-    setForm({ name: '', location: '', device_mode: 'MEDIUM' })
+    await createSensor.mutateAsync({ ...form, id_device: deviceId, id_sensor_model: Number(form.id_sensor_model) })
+    setForm({ id_sensor_model: '', port_address: '', is_active: true })
     setShowForm(false)
   }
 
-  async function handleRotate(id) {
-    const result = await rotateToken.mutateAsync(id)
-    setNewToken({ id, token: result.device_token })
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-gray-300">Sensors</h4>
+        <button onClick={() => setShowForm(v => !v)} className="btn-secondary text-xs px-2 py-1">
+          {showForm ? 'Cancel' : '+ Add'}
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleAdd} className="bg-gray-900 rounded-lg p-3 space-y-2">
+          <div>
+            <label className="label">Sensor model</label>
+            <select value={form.id_sensor_model} onChange={e => setForm(f => ({ ...f, id_sensor_model: e.target.value }))}
+              required className="input">
+              <option value="">Select…</option>
+              {modelList.map(m => <option key={m.id_sensor_model} value={m.id_sensor_model}>{m.model_name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Port / I2C address</label>
+            <input value={form.port_address} onChange={e => setForm(f => ({ ...f, port_address: e.target.value }))}
+              className="input" placeholder="0x29" />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} />
+            Active
+          </label>
+          <button type="submit" disabled={createSensor.isPending} className="btn-primary text-xs">
+            {createSensor.isPending ? 'Adding…' : 'Add sensor'}
+          </button>
+        </form>
+      )}
+
+      {isLoading ? <div className="text-gray-500 text-xs">Loading…</div> : (
+        <div className="space-y-1">
+          {list.length === 0 && <div className="text-gray-600 text-xs">No sensors attached.</div>}
+          {list.map(s => (
+            <div key={s.id_device_sensor} className="flex items-center justify-between bg-gray-900 rounded px-3 py-2 text-sm">
+              <span className="text-gray-200">#{s.id_sensor_model} <span className="text-gray-500">addr:</span> {s.port_address ?? '—'}</span>
+              <button onClick={() => deleteSensor.mutateAsync({ id: s.id_device_sensor, deviceId })}
+                className="text-red-400 hover:text-red-300 text-xs">Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ActuatorsPanel({ deviceId }) {
+  const { data: actuators, isLoading } = useDeviceActuators(deviceId)
+  const { data: models } = useActuatorModels()
+  const createActuator = useCreateDeviceActuator()
+  const deleteActuator = useDeleteDeviceActuator()
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ id_actuator_model: '', name: '', instance_config: '{}', is_active: true })
+  const [jsonError, setJsonError] = useState(null)
+
+  const list = Array.isArray(actuators) ? actuators : (actuators?.data ?? [])
+  const modelList = Array.isArray(models) ? models : (models?.data ?? [])
+
+  async function handleAdd(e) {
+    e.preventDefault()
+    let parsed
+    try { parsed = JSON.parse(form.instance_config) } catch { setJsonError('Invalid JSON'); return }
+    setJsonError(null)
+    await createActuator.mutateAsync({
+      id_device: deviceId,
+      id_actuator_model: Number(form.id_actuator_model),
+      name: form.name,
+      instance_config: parsed,
+      is_active: form.is_active,
+    })
+    setForm({ id_actuator_model: '', name: '', instance_config: '{}', is_active: true })
+    setShowForm(false)
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-gray-300">Actuators</h4>
+        <button onClick={() => setShowForm(v => !v)} className="btn-secondary text-xs px-2 py-1">
+          {showForm ? 'Cancel' : '+ Add'}
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleAdd} className="bg-gray-900 rounded-lg p-3 space-y-2">
+          <div>
+            <label className="label">Actuator model</label>
+            <select value={form.id_actuator_model} onChange={e => setForm(f => ({ ...f, id_actuator_model: e.target.value }))}
+              required className="input">
+              <option value="">Select…</option>
+              {modelList.map(m => <option key={m.id_actuator_model} value={m.id_actuator_model}>{m.model_name} ({m.actuator_type})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Name (friendly label)</label>
+            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              className="input" placeholder="Fan A" />
+          </div>
+          <div>
+            <label className="label">Instance config (JSON)</label>
+            <textarea value={form.instance_config}
+              onChange={e => { setForm(f => ({ ...f, instance_config: e.target.value })); setJsonError(null) }}
+              className="input font-mono text-xs" rows={3} placeholder='{"gpio_pin": 17}' />
+            {jsonError && <p className="text-red-400 text-xs mt-1">{jsonError}</p>}
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} />
+            Active
+          </label>
+          <button type="submit" disabled={createActuator.isPending} className="btn-primary text-xs">
+            {createActuator.isPending ? 'Adding…' : 'Add actuator'}
+          </button>
+        </form>
+      )}
+
+      {isLoading ? <div className="text-gray-500 text-xs">Loading…</div> : (
+        <div className="space-y-1">
+          {list.length === 0 && <div className="text-gray-600 text-xs">No actuators attached.</div>}
+          {list.map(a => (
+            <div key={a.id_device_actuator} className="flex items-center justify-between bg-gray-900 rounded px-3 py-2 text-sm">
+              <span className="text-gray-200">{a.name || '(unnamed)'} <span className="text-gray-500">model:</span> #{a.id_actuator_model}</span>
+              <button onClick={() => deleteActuator.mutateAsync({ id: a.id_device_actuator, deviceId })}
+                className="text-red-400 hover:text-red-300 text-xs">Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Device detail panel (inline expand)
+// ---------------------------------------------------------------------------
+
+function DeviceDetail({ device, onClose }) {
+  const updateDevice = useUpdateDevice()
+  const rotateToken  = useRotateDeviceToken()
+  const [newToken, setNewToken] = useState(null)
+  const [editForm, setEditForm] = useState({
+    name: device.name,
+    location: device.location ?? '',
+    mac_address: device.mac_address ?? '',
+    device_mode: device.device_mode,
+    tailscale_ip: device.tailscale_ip ?? '',
+  })
+
+  async function handleUpdate(e) {
+    e.preventDefault()
+    await updateDevice.mutateAsync({ id: device.id_device, ...editForm })
+  }
+
+  async function handleRotate() {
+    const result = await rotateToken.mutateAsync(device.id_device)
+    setNewToken(result.device_token)
+  }
+
+  const localUrl = device.tailscale_ip ? `http://${device.tailscale_ip}:80` : null
+
+  return (
+    <div className="card space-y-6 border border-gray-700">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-200">Device #{device.id_device} — {device.name}</h3>
+        <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-xs">✕ Close</button>
+      </div>
+
+      <TokenReveal data={newToken ? { token: newToken } : null} onDismiss={() => setNewToken(null)} />
+
+      {/* Edit form */}
+      <form onSubmit={handleUpdate} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="label">Name</label>
+          <input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+            required className="input" />
+        </div>
+        <div>
+          <label className="label">MAC address</label>
+          <input value={editForm.mac_address} onChange={e => setEditForm(f => ({ ...f, mac_address: e.target.value }))}
+            className="input" placeholder="AA:BB:CC:DD:EE:FF" />
+        </div>
+        <div>
+          <label className="label">Location</label>
+          <input value={editForm.location} onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))}
+            className="input" placeholder="Room 1" />
+        </div>
+        <div>
+          <label className="label">Mode</label>
+          <select value={editForm.device_mode} onChange={e => setEditForm(f => ({ ...f, device_mode: e.target.value }))}
+            className="input">
+            {['LOW', 'MEDIUM', 'HIGH'].map(m => <option key={m}>{m}</option>)}
+          </select>
+        </div>
+        <div className="md:col-span-2">
+          <label className="label">Tailscale IP (for local dashboard link)</label>
+          <input value={editForm.tailscale_ip} onChange={e => setEditForm(f => ({ ...f, tailscale_ip: e.target.value }))}
+            className="input" placeholder="100.x.y.z" />
+        </div>
+        <div className="md:col-span-2 flex gap-2">
+          <button type="submit" disabled={updateDevice.isPending} className="btn-primary text-xs">
+            {updateDevice.isPending ? 'Saving…' : 'Save changes'}
+          </button>
+          <button type="button" onClick={handleRotate} disabled={rotateToken.isPending}
+            className="btn-secondary text-xs">
+            {rotateToken.isPending ? 'Rotating…' : 'Rotate token'}
+          </button>
+          {localUrl && (
+            <a href={localUrl} target="_blank" rel="noreferrer" className="btn-secondary text-xs">
+              Open Local Dashboard ↗
+            </a>
+          )}
+        </div>
+      </form>
+
+      <hr className="border-gray-800" />
+      <SensorsPanel deviceId={device.id_device} />
+      <hr className="border-gray-800" />
+      <ActuatorsPanel deviceId={device.id_device} />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main Devices page
+// ---------------------------------------------------------------------------
+
+export default function Devices() {
+  const { data, isLoading }  = useDevices()
+  const { data: usersData }  = useUsers()
+  const createDevice         = useCreateDevice()
+
+  const [showForm, setShowForm] = useState(false)
+  const [newToken, setNewToken] = useState(null)
+  const [expandedId, setExpandedId] = useState(null)
+  const [form, setForm] = useState({
+    name: '', location: '', mac_address: '', device_mode: 'MEDIUM', id_user: '',
+  })
+
+  const list = Array.isArray(data) ? data : (data?.data ?? [])
+  const users = Array.isArray(usersData) ? usersData : (usersData?.data ?? [])
+
+  async function handleCreate(e) {
+    e.preventDefault()
+    const body = { ...form }
+    if (!body.id_user) delete body.id_user   // backend auto-assigns logged-in user
+    const result = await createDevice.mutateAsync(body)
+    setNewToken({ token: result.device_token })
+    setForm({ name: '', location: '', mac_address: '', device_mode: 'MEDIUM', id_user: '' })
+    setShowForm(false)
+  }
+
+  function toggleDetail(id) {
+    setExpandedId(prev => prev === id ? null : id)
   }
 
   return (
@@ -35,78 +325,102 @@ export default function Devices() {
 
       {/* New device form */}
       {showForm && (
-        <form onSubmit={handleCreate} className="card space-y-4 max-w-md">
+        <form onSubmit={handleCreate} className="card space-y-4 max-w-lg">
           <h3 className="text-sm font-semibold text-gray-300">Register device</h3>
-          <div>
-            <label className="label">Name</label>
-            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              required className="input" placeholder="Greenhouse A" />
-          </div>
-          <div>
-            <label className="label">Location</label>
-            <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
-              className="input" placeholder="Room 1" />
-          </div>
-          <div>
-            <label className="label">Mode</label>
-            <select value={form.device_mode} onChange={e => setForm(f => ({ ...f, device_mode: e.target.value }))}
-              className="input">
-              {['LOW', 'MEDIUM', 'HIGH'].map(m => <option key={m}>{m}</option>)}
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="label">Name *</label>
+              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                required className="input" placeholder="Greenhouse A" />
+            </div>
+            <div>
+              <label className="label">MAC address</label>
+              <input value={form.mac_address} onChange={e => setForm(f => ({ ...f, mac_address: e.target.value }))}
+                className="input" placeholder="AA:BB:CC:DD:EE:FF" />
+            </div>
+            <div>
+              <label className="label">Location</label>
+              <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+                className="input" placeholder="Room 1" />
+            </div>
+            <div>
+              <label className="label">Mode</label>
+              <select value={form.device_mode} onChange={e => setForm(f => ({ ...f, device_mode: e.target.value }))}
+                className="input">
+                {['LOW', 'MEDIUM', 'HIGH'].map(m => <option key={m}>{m}</option>)}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label">Owner (leave blank to assign to yourself)</label>
+              <select value={form.id_user} onChange={e => setForm(f => ({ ...f, id_user: e.target.value }))}
+                className="input">
+                <option value="">— My account (default) —</option>
+                {users.map(u => <option key={u.id_user} value={u.id_user}>{u.name} ({u.email})</option>)}
+              </select>
+            </div>
           </div>
           <button type="submit" disabled={createDevice.isPending} className="btn-primary">
-            {createDevice.isPending ? 'Creating…' : 'Create'}
+            {createDevice.isPending ? 'Creating…' : 'Create device'}
           </button>
         </form>
       )}
 
-      {/* Token reveal after rotation */}
-      {newToken && (
-        <div className="card border-yellow-700 space-y-2">
-          <p className="text-sm font-medium text-yellow-400">⚠ New device token — copy now, it won't be shown again</p>
-          <code className="block text-xs bg-gray-800 rounded p-3 break-all text-gray-200">{newToken.token}</code>
-          <button onClick={() => setNewToken(null)} className="btn-secondary text-xs">Dismiss</button>
-        </div>
-      )}
+      {/* Token reveal after creation or rotation */}
+      <TokenReveal data={newToken} onDismiss={() => setNewToken(null)} />
 
       {/* Devices table */}
       {isLoading ? (
         <div className="text-gray-500">Loading…</div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-800">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-900">
-              <tr>
-                <th className="th">ID</th>
-                <th className="th">Name</th>
-                <th className="th">Location</th>
-                <th className="th">Mode</th>
-                <th className="th">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800">
-              {list.map(d => (
-                <tr key={d.id_device} className="bg-gray-950 hover:bg-gray-900">
-                  <td className="td text-gray-500">{d.id_device}</td>
-                  <td className="td font-medium text-gray-200">{d.name}</td>
-                  <td className="td">{d.location ?? '—'}</td>
-                  <td className="td"><span className="badge-gray">{d.device_mode}</span></td>
-                  <td className="td">
-                    <div className="flex gap-2">
-                      <Link to={`/devices/${d.id_device}`} className="btn-secondary text-xs px-3 py-1">Details</Link>
-                      <button
-                        onClick={() => handleRotate(d.id_device)}
-                        disabled={rotateToken.isPending}
-                        className="btn-secondary text-xs px-3 py-1"
-                      >
-                        Rotate token
-                      </button>
-                    </div>
-                  </td>
+        <div className="space-y-3">
+          <div className="overflow-x-auto rounded-xl border border-gray-800">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-900">
+                <tr>
+                  <th className="th">ID</th>
+                  <th className="th">Name</th>
+                  <th className="th">MAC</th>
+                  <th className="th">Location</th>
+                  <th className="th">Mode</th>
+                  <th className="th">Status</th>
+                  <th className="th">Last seen</th>
+                  <th className="th">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {list.map(d => (
+                  <>
+                    <tr key={d.id_device} className="bg-gray-950 hover:bg-gray-900">
+                      <td className="td text-gray-500">{d.id_device}</td>
+                      <td className="td font-medium text-gray-200">{d.name}</td>
+                      <td className="td text-gray-400 font-mono text-xs">{d.mac_address ?? '—'}</td>
+                      <td className="td">{d.location ?? '—'}</td>
+                      <td className="td"><span className="badge-gray">{d.device_mode}</span></td>
+                      <td className="td"><StatusBadge lastSeenAt={d.last_seen_at} /></td>
+                      <td className="td text-gray-500 text-xs">
+                        {d.last_seen_at ? new Date(d.last_seen_at).toLocaleString() : '—'}
+                      </td>
+                      <td className="td">
+                        <button
+                          onClick={() => toggleDetail(d.id_device)}
+                          className="btn-secondary text-xs px-3 py-1"
+                        >
+                          {expandedId === d.id_device ? 'Close' : 'Details'}
+                        </button>
+                      </td>
+                    </tr>
+                    {expandedId === d.id_device && (
+                      <tr key={`${d.id_device}-detail`}>
+                        <td colSpan={8} className="p-4 bg-gray-950">
+                          <DeviceDetail device={d} onClose={() => setExpandedId(null)} />
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

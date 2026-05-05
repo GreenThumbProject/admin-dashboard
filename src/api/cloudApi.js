@@ -65,6 +65,13 @@ export async function registerUser(name, email, password) {
 }
 
 // ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+export function useUsers() {
+  return useQuery({ queryKey: ['users'], queryFn: () => get('/admin/users') })
+}
+
+// ---------------------------------------------------------------------------
 // Devices
 // ---------------------------------------------------------------------------
 export function useDevices() {
@@ -94,11 +101,62 @@ export function useUpdateDevice() {
     },
   })
 }
+// Token rotation now calls the admin endpoint (JWT auth, not device token)
 export function useRotateDeviceToken() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id) => post(`/sync/devices/${id}/token`, {}),
+    mutationFn: (id) => post(`/admin/devices/${id}/token`, {}),
     onSuccess: (_, id) => qc.invalidateQueries({ queryKey: ['device', id] }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Device sensors
+// ---------------------------------------------------------------------------
+export function useDeviceSensors(deviceId) {
+  return useQuery({
+    queryKey: ['device-sensors', deviceId],
+    queryFn: () => get(`/admin/device-sensors?id_device=${deviceId}`),
+    enabled: !!deviceId,
+  })
+}
+export function useCreateDeviceSensor() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => post('/admin/device-sensors', body),
+    onSuccess: (_, body) => qc.invalidateQueries({ queryKey: ['device-sensors', body.id_device] }),
+  })
+}
+export function useDeleteDeviceSensor() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }) => del(`/admin/device-sensors/${id}`),
+    onSuccess: (_, { deviceId }) => qc.invalidateQueries({ queryKey: ['device-sensors', deviceId] }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Device actuators
+// ---------------------------------------------------------------------------
+export function useDeviceActuators(deviceId) {
+  return useQuery({
+    queryKey: ['device-actuators', deviceId],
+    queryFn: () => get(`/admin/device-actuators?id_device=${deviceId}`),
+    enabled: !!deviceId,
+  })
+}
+export function useCreateDeviceActuator() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => post('/admin/device-actuators', body),
+    onSuccess: (_, body) => qc.invalidateQueries({ queryKey: ['device-actuators', body.id_device] }),
+  })
+}
+export function useDeleteDeviceActuator() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }) => del(`/admin/device-actuators/${id}`),
+    onSuccess: (_, { deviceId }) => qc.invalidateQueries({ queryKey: ['device-actuators', deviceId] }),
   })
 }
 
@@ -213,3 +271,18 @@ export function useSensorModels()   { return useQuery({ queryKey: ['sensor-model
 export function useActuatorModels() { return useQuery({ queryKey: ['actuator-models'], queryFn: () => get('/admin/actuator-models') }) }
 export function useVariables()      { return useQuery({ queryKey: ['variables'],        queryFn: () => get('/admin/variables')        }) }
 export function useUnits()          { return useQuery({ queryKey: ['units'],            queryFn: () => get('/admin/units')            }) }
+
+export function useCreateSensorModel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => post('/admin/sensor-models', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sensor-models'] }),
+  })
+}
+export function useCreateActuatorModel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => post('/admin/actuator-models', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['actuator-models'] }),
+  })
+}
