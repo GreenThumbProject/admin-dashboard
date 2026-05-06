@@ -68,7 +68,7 @@ export default function Fleet() {
                     {d.updated_at ? new Date(d.updated_at).toLocaleString() : '—'}
                   </td>
                   <td className="td">
-                    <Link to={`/devices/${d.id_device}`} className="btn-secondary text-xs px-3 py-1">
+                    <Link to={`/devices?open=${d.id_device}`} className="btn-secondary text-xs px-3 py-1">
                       View
                     </Link>
                   </td>

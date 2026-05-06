@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   useDevices, useCreateDevice, useUpdateDevice, useRotateDeviceToken,
-  useUsers, useSensorModels, useActuatorModels,
-  useDeviceSensors, useCreateDeviceSensor, useDeleteDeviceSensor,
-  useDeviceActuators, useCreateDeviceActuator, useDeleteDeviceActuator,
+  useUsers, useSensorModels, useActuatorModels, useVariables,
+  useDeviceSensors, useCreateDeviceSensor, useDeleteDeviceSensor, useUpdateDeviceSensor,
+  useDeviceActuators, useCreateDeviceActuator, useDeleteDeviceActuator, useUpdateDeviceActuator,
+  useSensorCapabilities,
 } from '../api/cloudApi'
 
 // ---------------------------------------------------------------------------
@@ -38,16 +40,42 @@ function TokenReveal({ data, onDismiss }) {
 // Sensor/Actuator management panel (shown in device detail)
 // ---------------------------------------------------------------------------
 
+function SensorCapabilities({ sensorModelId }) {
+  const { data: caps, isLoading } = useSensorCapabilities(sensorModelId)
+  const { data: vars } = useVariables()
+  const capList = Array.isArray(caps) ? caps : (caps?.data ?? [])
+  const varList = Array.isArray(vars) ? vars : (vars?.data ?? [])
+  const varMap  = Object.fromEntries(varList.map(v => [v.id_variable, v.name]))
+
+  if (isLoading) return <p className="text-gray-600 text-xs">Loading…</p>
+  if (!capList.length) return <p className="text-gray-600 text-xs">No capabilities defined for this model.</p>
+  return (
+    <div className="space-y-1">
+      {capList.map(c => (
+        <p key={c.id_sensor_capability ?? c.id_variable} className="text-xs text-gray-400">
+          • {varMap[c.id_variable] ?? `Variable #${c.id_variable}`}
+          {(c.min_range != null || c.max_range != null) && (
+            <span className="text-gray-600"> [{c.min_range ?? '—'} – {c.max_range ?? '—'}]</span>
+          )}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 function SensorsPanel({ deviceId }) {
   const { data: sensors, isLoading } = useDeviceSensors(deviceId)
-  const { data: models } = useSensorModels()
-  const createSensor  = useCreateDeviceSensor()
-  const deleteSensor  = useDeleteDeviceSensor()
-  const [showForm, setShowForm] = useState(false)
+  const { data: models }   = useSensorModels()
+  const createSensor       = useCreateDeviceSensor()
+  const deleteSensor       = useDeleteDeviceSensor()
+  const updateSensor       = useUpdateDeviceSensor()
+  const [showForm, setShowForm]     = useState(false)
+  const [expandedId, setExpandedId] = useState(null)
   const [form, setForm] = useState({ id_sensor_model: '', port_address: '', is_active: true })
 
-  const list = Array.isArray(sensors) ? sensors : (sensors?.data ?? [])
-  const modelList = Array.isArray(models) ? models : (models?.data ?? [])
+  const list      = Array.isArray(sensors) ? sensors : (sensors?.data ?? [])
+  const modelList = Array.isArray(models)  ? models  : (models?.data  ?? [])
+  const modelMap  = Object.fromEntries(modelList.map(m => [m.id_sensor_model, m.model_name]))
 
   async function handleAdd(e) {
     e.preventDefault()
@@ -94,10 +122,35 @@ function SensorsPanel({ deviceId }) {
         <div className="space-y-1">
           {list.length === 0 && <div className="text-gray-600 text-xs">No sensors attached.</div>}
           {list.map(s => (
-            <div key={s.id_device_sensor} className="flex items-center justify-between bg-gray-900 rounded px-3 py-2 text-sm">
-              <span className="text-gray-200">#{s.id_sensor_model} <span className="text-gray-500">addr:</span> {s.port_address ?? '—'}</span>
-              <button onClick={() => deleteSensor.mutateAsync({ id: s.id_device_sensor, deviceId })}
-                className="text-red-400 hover:text-red-300 text-xs">Remove</button>
+            <div key={s.id_device_sensor} className="bg-gray-900 rounded">
+              <div className="flex items-center justify-between px-3 py-2 text-sm">
+                <button
+                  onClick={() => setExpandedId(v => v === s.id_device_sensor ? null : s.id_device_sensor)}
+                  className="flex items-center gap-2 text-left min-w-0"
+                >
+                  <span className={s.is_active ? 'text-green-400 text-xs' : 'text-gray-600 text-xs'}>●</span>
+                  <span className="text-gray-200">{modelMap[s.id_sensor_model] ?? `#${s.id_sensor_model}`}</span>
+                  <span className="text-gray-500 text-xs">addr: {s.port_address ?? '—'}</span>
+                  <span className="text-gray-700 text-xs">{expandedId === s.id_device_sensor ? '▲' : '▼'}</span>
+                </button>
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    onClick={() => updateSensor.mutateAsync({ id: s.id_device_sensor, deviceId, is_active: !s.is_active })}
+                    disabled={updateSensor.isPending}
+                    className="text-xs text-gray-500 hover:text-gray-300"
+                  >
+                    {s.is_active ? 'Deactivate' : 'Activate'}
+                  </button>
+                  <button onClick={() => deleteSensor.mutateAsync({ id: s.id_device_sensor, deviceId })}
+                    className="text-red-400 hover:text-red-300 text-xs">Remove</button>
+                </div>
+              </div>
+              {expandedId === s.id_device_sensor && (
+                <div className="px-4 pb-3 pt-1 border-t border-gray-800">
+                  <p className="text-xs text-gray-500 mb-1">Capabilities</p>
+                  <SensorCapabilities sensorModelId={s.id_sensor_model} />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -108,15 +161,17 @@ function SensorsPanel({ deviceId }) {
 
 function ActuatorsPanel({ deviceId }) {
   const { data: actuators, isLoading } = useDeviceActuators(deviceId)
-  const { data: models } = useActuatorModels()
-  const createActuator = useCreateDeviceActuator()
-  const deleteActuator = useDeleteDeviceActuator()
+  const { data: models }   = useActuatorModels()
+  const createActuator     = useCreateDeviceActuator()
+  const deleteActuator     = useDeleteDeviceActuator()
+  const updateActuator     = useUpdateDeviceActuator()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ id_actuator_model: '', name: '', instance_config: '{}', is_active: true })
   const [jsonError, setJsonError] = useState(null)
 
-  const list = Array.isArray(actuators) ? actuators : (actuators?.data ?? [])
-  const modelList = Array.isArray(models) ? models : (models?.data ?? [])
+  const list      = Array.isArray(actuators) ? actuators : (actuators?.data ?? [])
+  const modelList = Array.isArray(models)    ? models    : (models?.data    ?? [])
+  const modelMap  = Object.fromEntries(modelList.map(m => [m.id_actuator_model, m.model_name]))
 
   async function handleAdd(e) {
     e.preventDefault()
@@ -180,9 +235,22 @@ function ActuatorsPanel({ deviceId }) {
           {list.length === 0 && <div className="text-gray-600 text-xs">No actuators attached.</div>}
           {list.map(a => (
             <div key={a.id_device_actuator} className="flex items-center justify-between bg-gray-900 rounded px-3 py-2 text-sm">
-              <span className="text-gray-200">{a.name || '(unnamed)'} <span className="text-gray-500">model:</span> #{a.id_actuator_model}</span>
-              <button onClick={() => deleteActuator.mutateAsync({ id: a.id_device_actuator, deviceId })}
-                className="text-red-400 hover:text-red-300 text-xs">Remove</button>
+              <span className="flex items-center gap-2">
+                <span className={a.is_active ? 'text-green-400 text-xs' : 'text-gray-600 text-xs'}>●</span>
+                <span className="text-gray-200">{a.name || modelMap[a.id_actuator_model] || `#${a.id_actuator_model}`}</span>
+                <span className="text-gray-500 text-xs">({modelMap[a.id_actuator_model] ?? `model #${a.id_actuator_model}`})</span>
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => updateActuator.mutateAsync({ id: a.id_device_actuator, deviceId, is_active: !a.is_active })}
+                  disabled={updateActuator.isPending}
+                  className="text-xs text-gray-500 hover:text-gray-300"
+                >
+                  {a.is_active ? 'Deactivate' : 'Activate'}
+                </button>
+                <button onClick={() => deleteActuator.mutateAsync({ id: a.id_device_actuator, deviceId })}
+                  className="text-red-400 hover:text-red-300 text-xs">Remove</button>
+              </div>
             </div>
           ))}
         </div>
@@ -196,9 +264,10 @@ function ActuatorsPanel({ deviceId }) {
 // ---------------------------------------------------------------------------
 
 function DeviceDetail({ device, onClose }) {
-  const updateDevice = useUpdateDevice()
-  const rotateToken  = useRotateDeviceToken()
-  const [newToken, setNewToken] = useState(null)
+  const updateDevice  = useUpdateDevice()
+  const rotateToken   = useRotateDeviceToken()
+  const [newToken, setNewToken]     = useState(null)
+  const [saveStatus, setSaveStatus] = useState(null)
   const [editForm, setEditForm] = useState({
     name: device.name,
     location: device.location ?? '',
@@ -209,7 +278,14 @@ function DeviceDetail({ device, onClose }) {
 
   async function handleUpdate(e) {
     e.preventDefault()
-    await updateDevice.mutateAsync({ id: device.id_device, ...editForm })
+    setSaveStatus(null)
+    try {
+      await updateDevice.mutateAsync({ id: device.id_device, ...editForm })
+      setSaveStatus('success')
+      setTimeout(() => setSaveStatus(null), 3000)
+    } catch {
+      setSaveStatus('error')
+    }
   }
 
   async function handleRotate() {
@@ -257,7 +333,7 @@ function DeviceDetail({ device, onClose }) {
           <input value={editForm.tailscale_ip} onChange={e => setEditForm(f => ({ ...f, tailscale_ip: e.target.value }))}
             className="input" placeholder="100.x.y.z" />
         </div>
-        <div className="md:col-span-2 flex gap-2">
+        <div className="md:col-span-2 flex items-center gap-2 flex-wrap">
           <button type="submit" disabled={updateDevice.isPending} className="btn-primary text-xs">
             {updateDevice.isPending ? 'Saving…' : 'Save changes'}
           </button>
@@ -270,6 +346,8 @@ function DeviceDetail({ device, onClose }) {
               Open Local Dashboard ↗
             </a>
           )}
+          {saveStatus === 'success' && <span className="text-green-400 text-xs">Saved!</span>}
+          {saveStatus === 'error'   && <span className="text-red-400 text-xs">Save failed.</span>}
         </div>
       </form>
 
@@ -289,10 +367,13 @@ export default function Devices() {
   const { data, isLoading }  = useDevices()
   const { data: usersData }  = useUsers()
   const createDevice         = useCreateDevice()
+  const [searchParams]       = useSearchParams()
 
   const [showForm, setShowForm] = useState(false)
   const [newToken, setNewToken] = useState(null)
-  const [expandedId, setExpandedId] = useState(null)
+  const [expandedId, setExpandedId] = useState(
+    searchParams.get('open') ? Number(searchParams.get('open')) : null
+  )
   const [form, setForm] = useState({
     name: '', location: '', mac_address: '', device_mode: 'MEDIUM', id_user: '',
   })

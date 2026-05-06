@@ -286,3 +286,64 @@ export function useCreateActuatorModel() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['actuator-models'] }),
   })
 }
+
+// ---------------------------------------------------------------------------
+// Sensor capabilities (per sensor model)
+// ---------------------------------------------------------------------------
+export function useSensorCapabilities(sensorModelId) {
+  return useQuery({
+    queryKey: ['sensor-capabilities', sensorModelId],
+    queryFn: () => get(`/admin/sensor-capabilities?id_sensor_model=${sensorModelId}`),
+    enabled: !!sensorModelId,
+  })
+}
+export function useCreateSensorCapability() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => post('/admin/sensor-capabilities', body),
+    onSuccess: (_, body) => qc.invalidateQueries({ queryKey: ['sensor-capabilities', body.id_sensor_model] }),
+  })
+}
+export function useDeleteSensorCapability() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }) => del(`/admin/sensor-capabilities/${id}`),
+    onSuccess: (_, { id_sensor_model }) => qc.invalidateQueries({ queryKey: ['sensor-capabilities', id_sensor_model] }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Device sensor / actuator update (toggle active)
+// ---------------------------------------------------------------------------
+export function useUpdateDeviceSensor() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }) => patch(`/admin/device-sensors/${id}`, body),
+    onSuccess: (_, { deviceId }) => qc.invalidateQueries({ queryKey: ['device-sensors', deviceId] }),
+  })
+}
+export function useUpdateDeviceActuator() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }) => patch(`/admin/device-actuators/${id}`, body),
+    onSuccess: (_, { deviceId }) => qc.invalidateQueries({ queryKey: ['device-actuators', deviceId] }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Units and Variables — create
+// ---------------------------------------------------------------------------
+export function useCreateUnit() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => post('/admin/units', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['units'] }),
+  })
+}
+export function useCreateVariable() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => post('/admin/variables', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['variables'] }),
+  })
+}

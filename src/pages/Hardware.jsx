@@ -2,6 +2,8 @@ import { useState } from 'react'
 import {
   useSensorModels, useActuatorModels, useVariables, useUnits,
   useCreateSensorModel, useCreateActuatorModel,
+  useSensorCapabilities, useCreateSensorCapability, useDeleteSensorCapability,
+  useCreateUnit, useCreateVariable,
 } from '../api/cloudApi'
 
 function Table({ items, columns }) {
@@ -29,13 +31,111 @@ function Table({ items, columns }) {
   )
 }
 
-function SensorModelSection() {
-  const { data }       = useSensorModels()
-  const createModel    = useCreateSensorModel()
-  const [show, setShow] = useState(false)
-  const [form, setForm] = useState({ model_name: '', manufacturer: '' })
+// ---------------------------------------------------------------------------
+// Inline capability manager for a single sensor model row
+// ---------------------------------------------------------------------------
 
-  const items = Array.isArray(data) ? data : (data?.data ?? [])
+function SensorModelCapabilities({ model, variables }) {
+  const { data: caps }        = useSensorCapabilities(model.id_sensor_model)
+  const createCap             = useCreateSensorCapability()
+  const deleteCap             = useDeleteSensorCapability()
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm]         = useState({ id_variable: '', min_range: '', max_range: '' })
+
+  const capList = Array.isArray(caps) ? caps : (caps?.data ?? [])
+  const varMap  = Object.fromEntries(variables.map(v => [v.id_variable, v.name]))
+
+  async function handleAdd(e) {
+    e.preventDefault()
+    await createCap.mutateAsync({
+      id_sensor_model: model.id_sensor_model,
+      id_variable:     Number(form.id_variable),
+      min_range:       form.min_range !== '' ? Number(form.min_range) : null,
+      max_range:       form.max_range !== '' ? Number(form.max_range) : null,
+    })
+    setForm({ id_variable: '', min_range: '', max_range: '' })
+    setShowForm(false)
+  }
+
+  return (
+    <div className="px-4 pb-3 pt-2 border-t border-gray-800 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">Capabilities</p>
+        <button onClick={() => setShowForm(v => !v)} className="btn-secondary text-xs px-2 py-0.5">
+          {showForm ? 'Cancel' : '+ Add'}
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleAdd} className="bg-gray-950 rounded p-2 space-y-2">
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="label">Variable *</label>
+              <select value={form.id_variable} onChange={e => setForm(f => ({ ...f, id_variable: e.target.value }))}
+                required className="input text-xs">
+                <option value="">Select…</option>
+                {variables.map(v => <option key={v.id_variable} value={v.id_variable}>{v.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Min range</label>
+              <input type="number" step="any" value={form.min_range}
+                onChange={e => setForm(f => ({ ...f, min_range: e.target.value }))}
+                className="input text-xs" placeholder="0" />
+            </div>
+            <div>
+              <label className="label">Max range</label>
+              <input type="number" step="any" value={form.max_range}
+                onChange={e => setForm(f => ({ ...f, max_range: e.target.value }))}
+                className="input text-xs" placeholder="100" />
+            </div>
+          </div>
+          <button type="submit" disabled={createCap.isPending} className="btn-primary text-xs">
+            {createCap.isPending ? 'Adding…' : 'Add capability'}
+          </button>
+        </form>
+      )}
+
+      {capList.length === 0 ? (
+        <p className="text-gray-600 text-xs">No capabilities defined.</p>
+      ) : (
+        <div className="space-y-1">
+          {capList.map(c => (
+            <div key={c.id_sensor_capability} className="flex items-center justify-between text-xs text-gray-400">
+              <span>
+                • {varMap[c.id_variable] ?? `Variable #${c.id_variable}`}
+                {(c.min_range != null || c.max_range != null) && (
+                  <span className="text-gray-600"> [{c.min_range ?? '—'} – {c.max_range ?? '—'}]</span>
+                )}
+              </span>
+              <button
+                onClick={() => deleteCap.mutateAsync({ id: c.id_sensor_capability, id_sensor_model: model.id_sensor_model })}
+                className="text-red-500 hover:text-red-400 ml-3"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Sensor models section
+// ---------------------------------------------------------------------------
+
+function SensorModelSection() {
+  const { data }            = useSensorModels()
+  const { data: varsData }  = useVariables()
+  const createModel         = useCreateSensorModel()
+  const [show, setShow]     = useState(false)
+  const [expandedId, setExpandedId] = useState(null)
+  const [form, setForm]     = useState({ model_name: '', manufacturer: '' })
+
+  const items    = Array.isArray(data)     ? data     : (data?.data     ?? [])
+  const varList  = Array.isArray(varsData) ? varsData : (varsData?.data ?? [])
 
   async function handleCreate(e) {
     e.preventDefault()
@@ -71,14 +171,55 @@ function SensorModelSection() {
         </form>
       )}
 
-      <Table items={items} columns={[
-        { key: 'id_sensor_model', label: 'ID' },
-        { key: 'model_name',      label: 'Model' },
-        { key: 'manufacturer',    label: 'Manufacturer' },
-      ]} />
+      {items.length === 0 ? (
+        <div className="text-gray-500 text-sm">No entries.</div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-gray-800">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-900">
+              <tr>
+                <th className="th">ID</th>
+                <th className="th">Model</th>
+                <th className="th">Manufacturer</th>
+                <th className="th"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-800">
+              {items.map(m => (
+                <>
+                  <tr key={m.id_sensor_model} className="bg-gray-950 hover:bg-gray-900">
+                    <td className="td text-gray-500">{m.id_sensor_model}</td>
+                    <td className="td text-gray-200">{m.model_name}</td>
+                    <td className="td text-gray-400">{m.manufacturer ?? '—'}</td>
+                    <td className="td">
+                      <button
+                        onClick={() => setExpandedId(v => v === m.id_sensor_model ? null : m.id_sensor_model)}
+                        className="text-xs text-gray-500 hover:text-gray-300"
+                      >
+                        {expandedId === m.id_sensor_model ? 'Hide caps' : 'Capabilities'}
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedId === m.id_sensor_model && (
+                    <tr key={`${m.id_sensor_model}-caps`}>
+                      <td colSpan={4} className="bg-gray-950">
+                        <SensorModelCapabilities model={m} variables={varList} />
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Actuator models section (unchanged)
+// ---------------------------------------------------------------------------
 
 function ActuatorModelSection() {
   const { data }       = useActuatorModels()
@@ -150,13 +291,117 @@ function ActuatorModelSection() {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Variables section
+// ---------------------------------------------------------------------------
+
+function VariableSection() {
+  const { data }        = useVariables()
+  const createVar       = useCreateVariable()
+  const [show, setShow]  = useState(false)
+  const [form, setForm]  = useState({ name: '', description: '' })
+
+  const items = Array.isArray(data) ? data : (data?.data ?? [])
+
+  async function handleCreate(e) {
+    e.preventDefault()
+    await createVar.mutateAsync(form)
+    setForm({ name: '', description: '' })
+    setShow(false)
+  }
+
+  return (
+    <div className="card space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-300">Variables</h3>
+        <button onClick={() => setShow(v => !v)} className="btn-secondary text-xs px-2 py-1">
+          {show ? 'Cancel' : '+ New'}
+        </button>
+      </div>
+      {show && (
+        <form onSubmit={handleCreate} className="bg-gray-900 rounded-lg p-3 space-y-2">
+          <div>
+            <label className="label">Name *</label>
+            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              required className="input" placeholder="temperature" />
+          </div>
+          <div>
+            <label className="label">Description</label>
+            <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              className="input" placeholder="Air temperature" />
+          </div>
+          <button type="submit" disabled={createVar.isPending} className="btn-primary text-xs">
+            {createVar.isPending ? 'Saving…' : 'Create'}
+          </button>
+        </form>
+      )}
+      <Table items={items} columns={[
+        { key: 'id_variable', label: 'ID' },
+        { key: 'name',        label: 'Name' },
+        { key: 'description', label: 'Description' },
+      ]} />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Units section
+// ---------------------------------------------------------------------------
+
+function UnitSection() {
+  const { data }        = useUnits()
+  const createUnit      = useCreateUnit()
+  const [show, setShow]  = useState(false)
+  const [form, setForm]  = useState({ symbol: '', name: '' })
+
+  const items = Array.isArray(data) ? data : (data?.data ?? [])
+
+  async function handleCreate(e) {
+    e.preventDefault()
+    await createUnit.mutateAsync(form)
+    setForm({ symbol: '', name: '' })
+    setShow(false)
+  }
+
+  return (
+    <div className="card space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-300">Units</h3>
+        <button onClick={() => setShow(v => !v)} className="btn-secondary text-xs px-2 py-1">
+          {show ? 'Cancel' : '+ New'}
+        </button>
+      </div>
+      {show && (
+        <form onSubmit={handleCreate} className="bg-gray-900 rounded-lg p-3 space-y-2">
+          <div>
+            <label className="label">Symbol *</label>
+            <input value={form.symbol} onChange={e => setForm(f => ({ ...f, symbol: e.target.value }))}
+              required className="input" placeholder="°C" />
+          </div>
+          <div>
+            <label className="label">Name *</label>
+            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              required className="input" placeholder="Celsius" />
+          </div>
+          <button type="submit" disabled={createUnit.isPending} className="btn-primary text-xs">
+            {createUnit.isPending ? 'Saving…' : 'Create'}
+          </button>
+        </form>
+      )}
+      <Table items={items} columns={[
+        { key: 'id_unit', label: 'ID' },
+        { key: 'symbol',  label: 'Symbol' },
+        { key: 'name',    label: 'Name' },
+      ]} />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default function Hardware() {
-  const { data: variables } = useVariables()
-  const { data: units }     = useUnits()
-
-  const vr = Array.isArray(variables) ? variables : (variables?.data ?? [])
-  const un = Array.isArray(units)     ? units     : (units?.data     ?? [])
-
   return (
     <div className="p-6 space-y-6">
       <h2 className="text-xl font-semibold">Hardware Catalog</h2>
@@ -165,22 +410,8 @@ export default function Hardware() {
       <ActuatorModelSection />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="card space-y-3">
-          <h3 className="text-sm font-semibold text-gray-300">Variables</h3>
-          <Table items={vr} columns={[
-            { key: 'id_variable', label: 'ID' },
-            { key: 'name',        label: 'Name' },
-            { key: 'description', label: 'Description' },
-          ]} />
-        </div>
-        <div className="card space-y-3">
-          <h3 className="text-sm font-semibold text-gray-300">Units</h3>
-          <Table items={un} columns={[
-            { key: 'id_unit', label: 'ID' },
-            { key: 'symbol', label: 'Symbol' },
-            { key: 'name',   label: 'Name' },
-          ]} />
-        </div>
+        <VariableSection />
+        <UnitSection />
       </div>
     </div>
   )
