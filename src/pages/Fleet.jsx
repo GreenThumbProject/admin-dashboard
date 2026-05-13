@@ -1,11 +1,11 @@
 import { useDevices } from '../api/cloudApi'
 import { Link } from 'react-router-dom'
 
-function statusBadge(updatedAt) {
-  if (!updatedAt) return <span className="badge-gray">Unknown</span>
-  const ago = (Date.now() - new Date(updatedAt)) / 60_000
-  if (ago < 10)  return <span className="badge-green">Online</span>
-  if (ago < 60)  return <span className="badge-yellow">Stale</span>
+function statusBadge(lastSeenAt) {
+  if (!lastSeenAt) return <span className="badge-gray">Never synced</span>
+  const hoursAgo = (Date.now() - new Date(lastSeenAt)) / 3_600_000
+  if (hoursAgo < 26)  return <span className="badge-green">Synced</span>
+  if (hoursAgo < 50)  return <span className="badge-yellow">Stale</span>
   return <span className="badge-red">Offline</span>
 }
 
@@ -24,7 +24,7 @@ export default function Fleet() {
       <div className="grid grid-cols-3 gap-4">
         {[
           { label: 'Total devices',  value: list.length },
-          { label: 'Online',         value: list.filter(d => d.updated_at && (Date.now() - new Date(d.updated_at)) < 600_000).length },
+          { label: 'Synced today',    value: list.filter(d => d.last_seen_at && (Date.now() - new Date(d.last_seen_at)) < 86_400_000).length },
           { label: 'Pending sync',   value: '—' },
         ].map(s => (
           <div key={s.label} className="card text-center">
@@ -63,9 +63,9 @@ export default function Fleet() {
                       d.device_mode === 'MEDIUM' ? 'badge-yellow' : 'badge-gray'
                     }`}>{d.device_mode}</span>
                   </td>
-                  <td className="td">{statusBadge(d.updated_at)}</td>
+                  <td className="td">{statusBadge(d.last_seen_at)}</td>
                   <td className="td text-gray-500">
-                    {d.updated_at ? new Date(d.updated_at).toLocaleString() : '—'}
+                    {d.last_seen_at ? new Date(d.last_seen_at).toLocaleString() : '—'}
                   </td>
                   <td className="td">
                     <Link to={`/devices?open=${d.id_device}`} className="btn-secondary text-xs px-3 py-1">
