@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import {
   useSensorModels, useActuatorModels, useVariables, useUnits,
-  useCreateSensorModel, useCreateActuatorModel,
+  useCreateSensorModel, useUpdateSensorModel, useDeleteSensorModel,
+  useCreateActuatorModel, useDeleteActuatorModel,
   useSensorCapabilities, useCreateSensorCapability, useDeleteSensorCapability,
-  useCreateUnit, useCreateVariable,
+  useCreateUnit, useDeleteUnit, useCreateVariable, useDeleteVariable,
 } from '../api/cloudApi'
 
 function Table({ items, columns }) {
@@ -130,8 +131,12 @@ function SensorModelSection() {
   const { data }            = useSensorModels()
   const { data: varsData }  = useVariables()
   const createModel         = useCreateSensorModel()
+  const updateModel         = useUpdateSensorModel()
+  const deleteModel         = useDeleteSensorModel()
   const [show, setShow]     = useState(false)
   const [expandedId, setExpandedId] = useState(null)
+  const [editingId, setEditingId]   = useState(null)
+  const [editForm, setEditForm]     = useState({ model_name: '', manufacturer: '' })
   const [form, setForm]     = useState({ model_name: '', manufacturer: '' })
 
   const items    = Array.isArray(data)     ? data     : (data?.data     ?? [])
@@ -186,28 +191,73 @@ function SensorModelSection() {
             </thead>
             <tbody className="divide-y divide-gray-800">
               {items.map(m => (
-                <>
-                  <tr key={m.id_sensor_model} className="bg-gray-950 hover:bg-gray-900">
+                <Fragment key={m.id_sensor_model}>
+                  <tr className="bg-gray-950 hover:bg-gray-900">
                     <td className="td text-gray-500">{m.id_sensor_model}</td>
                     <td className="td text-gray-200">{m.model_name}</td>
                     <td className="td text-gray-400">{m.manufacturer ?? '—'}</td>
-                    <td className="td">
+                    <td className="td text-right space-x-3">
                       <button
                         onClick={() => setExpandedId(v => v === m.id_sensor_model ? null : m.id_sensor_model)}
                         className="text-xs text-gray-500 hover:text-gray-300"
                       >
                         {expandedId === m.id_sensor_model ? 'Hide caps' : 'Capabilities'}
                       </button>
+                      <button
+                        onClick={() => {
+                          setEditingId(v => v === m.id_sensor_model ? null : m.id_sensor_model)
+                          setEditForm({ model_name: m.model_name, manufacturer: m.manufacturer ?? '' })
+                        }}
+                        className="text-xs text-blue-500 hover:text-blue-400"
+                      >
+                        {editingId === m.id_sensor_model ? 'Cancel' : 'Edit'}
+                      </button>
+                      <button
+                        onClick={() => deleteModel.mutateAsync(m.id_sensor_model)}
+                        className="text-xs text-red-500 hover:text-red-400"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
+                  {editingId === m.id_sensor_model && (
+                    <tr>
+                      <td colSpan={4} className="bg-gray-950 px-4 py-2">
+                        <form
+                          onSubmit={async e => {
+                            e.preventDefault()
+                            await updateModel.mutateAsync({ id: m.id_sensor_model, ...editForm })
+                            setEditingId(null)
+                          }}
+                          className="flex gap-2 items-end"
+                        >
+                          <div>
+                            <label className="label">Model name</label>
+                            <input value={editForm.model_name}
+                              onChange={e => setEditForm(f => ({ ...f, model_name: e.target.value }))}
+                              required className="input text-xs" />
+                          </div>
+                          <div>
+                            <label className="label">Manufacturer</label>
+                            <input value={editForm.manufacturer}
+                              onChange={e => setEditForm(f => ({ ...f, manufacturer: e.target.value }))}
+                              className="input text-xs" />
+                          </div>
+                          <button type="submit" disabled={updateModel.isPending} className="btn-primary text-xs">
+                            {updateModel.isPending ? 'Saving…' : 'Save'}
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  )}
                   {expandedId === m.id_sensor_model && (
-                    <tr key={`${m.id_sensor_model}-caps`}>
+                    <tr>
                       <td colSpan={4} className="bg-gray-950">
                         <SensorModelCapabilities model={m} variables={varList} />
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -224,6 +274,7 @@ function SensorModelSection() {
 function ActuatorModelSection() {
   const { data }       = useActuatorModels()
   const createModel    = useCreateActuatorModel()
+  const deleteModel    = useDeleteActuatorModel()
   const [show, setShow] = useState(false)
   const [form, setForm] = useState({ model_name: '', actuator_type: '', manufacturer: '', model_config_json: '{}' })
   const [jsonError, setJsonError] = useState(null)
@@ -286,6 +337,10 @@ function ActuatorModelSection() {
         { key: 'model_name',        label: 'Model' },
         { key: 'actuator_type',     label: 'Type' },
         { key: 'manufacturer',      label: 'Manufacturer' },
+        { key: '_actions', label: '', render: (_, row) => (
+          <button onClick={() => deleteModel.mutateAsync(row.id_actuator_model)}
+            className="text-xs text-red-500 hover:text-red-400">Delete</button>
+        )},
       ]} />
     </div>
   )
@@ -298,6 +353,7 @@ function ActuatorModelSection() {
 function VariableSection() {
   const { data }        = useVariables()
   const createVar       = useCreateVariable()
+  const deleteVar       = useDeleteVariable()
   const [show, setShow]  = useState(false)
   const [form, setForm]  = useState({ name: '', description: '' })
 
@@ -339,6 +395,10 @@ function VariableSection() {
         { key: 'id_variable', label: 'ID' },
         { key: 'name',        label: 'Name' },
         { key: 'description', label: 'Description' },
+        { key: '_actions', label: '', render: (_, row) => (
+          <button onClick={() => deleteVar.mutateAsync(row.id_variable)}
+            className="text-xs text-red-500 hover:text-red-400">Delete</button>
+        )},
       ]} />
     </div>
   )
@@ -351,6 +411,7 @@ function VariableSection() {
 function UnitSection() {
   const { data }        = useUnits()
   const createUnit      = useCreateUnit()
+  const deleteUnit      = useDeleteUnit()
   const [show, setShow]  = useState(false)
   const [form, setForm]  = useState({ symbol: '', name: '' })
 
@@ -392,6 +453,10 @@ function UnitSection() {
         { key: 'id_unit', label: 'ID' },
         { key: 'symbol',  label: 'Symbol' },
         { key: 'name',    label: 'Name' },
+        { key: '_actions', label: '', render: (_, row) => (
+          <button onClick={() => deleteUnit.mutateAsync(row.id_unit)}
+            className="text-xs text-red-500 hover:text-red-400">Delete</button>
+        )},
       ]} />
     </div>
   )

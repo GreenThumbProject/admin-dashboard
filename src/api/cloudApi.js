@@ -36,6 +36,7 @@ async function apiFetch(path, options = {}) {
 const get    = (path)        => apiFetch(path)
 const post   = (path, body)  => apiFetch(path, { method: 'POST',   body: JSON.stringify(body) })
 const patch  = (path, body)  => apiFetch(path, { method: 'PATCH',  body: JSON.stringify(body) })
+const put    = (path, body)  => apiFetch(path, { method: 'PUT',    body: JSON.stringify(body) })
 const del    = (path)        => apiFetch(path, { method: 'DELETE' })
 
 // ---------------------------------------------------------------------------
@@ -231,7 +232,7 @@ export function useCreateThreshold() {
 export function useUpdateThreshold() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...body }) => patch(`/admin/thresholds/${id}`, body),
+    mutationFn: ({ id, ...body }) => put(`/admin/thresholds/${id}`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['thresholds'] }),
   })
 }
@@ -279,10 +280,31 @@ export function useCreateSensorModel() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sensor-models'] }),
   })
 }
+export function useUpdateSensorModel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }) => put(`/admin/sensor-models/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sensor-models'] }),
+  })
+}
+export function useDeleteSensorModel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => del(`/admin/sensor-models/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sensor-models'] }),
+  })
+}
 export function useCreateActuatorModel() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body) => post('/admin/actuator-models', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['actuator-models'] }),
+  })
+}
+export function useDeleteActuatorModel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => del(`/admin/actuator-models/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['actuator-models'] }),
   })
 }
@@ -318,14 +340,14 @@ export function useDeleteSensorCapability() {
 export function useUpdateDeviceSensor() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...body }) => patch(`/admin/device-sensors/${id}`, body),
+    mutationFn: ({ id, ...body }) => put(`/admin/device-sensors/${id}`, body),
     onSuccess: (_, { deviceId }) => qc.invalidateQueries({ queryKey: ['device-sensors', deviceId] }),
   })
 }
 export function useUpdateDeviceActuator() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...body }) => patch(`/admin/device-actuators/${id}`, body),
+    mutationFn: ({ id, ...body }) => put(`/admin/device-actuators/${id}`, body),
     onSuccess: (_, { deviceId }) => qc.invalidateQueries({ queryKey: ['device-actuators', deviceId] }),
   })
 }
@@ -340,10 +362,24 @@ export function useCreateUnit() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['units'] }),
   })
 }
+export function useDeleteUnit() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => del(`/admin/units/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['units'] }),
+  })
+}
 export function useCreateVariable() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body) => post('/admin/variables', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['variables'] }),
+  })
+}
+export function useDeleteVariable() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => del(`/admin/variables/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['variables'] }),
   })
 }
