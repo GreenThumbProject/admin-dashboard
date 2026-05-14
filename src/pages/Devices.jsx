@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   useDevices, useCreateDevice, useUpdateDevice, useRotateDeviceToken,
@@ -275,6 +275,16 @@ function DeviceDetail({ device, onClose }) {
     device_mode: device.device_mode,
     tailscale_ip: device.tailscale_ip ?? '',
   })
+
+  useEffect(() => {
+    setEditForm({
+      name: device.name,
+      location: device.location ?? '',
+      mac_address: device.mac_address ?? '',
+      device_mode: device.device_mode,
+      tailscale_ip: device.tailscale_ip ?? '',
+    })
+  }, [device])
 
   async function handleUpdate(e) {
     e.preventDefault()
