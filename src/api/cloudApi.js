@@ -197,6 +197,59 @@ export function useCreateGrowthPhase() {
     onSuccess: (_, body) => qc.invalidateQueries({ queryKey: ['growth-phases', body.id_plant_species] }),
   })
 }
+export function useUpdateGrowthPhase() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, speciesId, ...body }) => put(`/admin/growth-phases/${id}`, body),
+    onSuccess: (_, { speciesId }) => qc.invalidateQueries({ queryKey: ['growth-phases', speciesId] }),
+  })
+}
+export function useDeleteGrowthPhase() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }) => del(`/admin/growth-phases/${id}`),
+    onSuccess: (_, { speciesId }) => qc.invalidateQueries({ queryKey: ['growth-phases', speciesId] }),
+  })
+}
+export function useUpdatePlantSpecies() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }) => put(`/admin/plant-species/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['plant-species'] }),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Species thresholds (templates)
+// ---------------------------------------------------------------------------
+export function useSpeciesThresholds(speciesId) {
+  return useQuery({
+    queryKey: ['species-thresholds', speciesId],
+    queryFn: () => get(`/admin/species-thresholds?id_plant_species=${speciesId}`),
+    enabled: !!speciesId,
+  })
+}
+export function useCreateSpeciesThreshold() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => post('/admin/species-thresholds', body),
+    onSuccess: (_, body) => qc.invalidateQueries({ queryKey: ['species-thresholds', body.id_plant_species] }),
+  })
+}
+export function useUpdateSpeciesThreshold() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, speciesId, ...body }) => put(`/admin/species-thresholds/${id}`, body),
+    onSuccess: (_, { speciesId }) => qc.invalidateQueries({ queryKey: ['species-thresholds', speciesId] }),
+  })
+}
+export function useDeleteSpeciesThreshold() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }) => del(`/admin/species-thresholds/${id}`),
+    onSuccess: (_, { speciesId }) => qc.invalidateQueries({ queryKey: ['species-thresholds', speciesId] }),
+  })
+}
 
 // ---------------------------------------------------------------------------
 // Cultivations
@@ -329,8 +382,10 @@ export function useCreateSensorCapability() {
 export function useDeleteSensorCapability() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id }) => del(`/admin/sensor-capabilities/${id}`),
-    onSuccess: (_, { id_sensor_model }) => qc.invalidateQueries({ queryKey: ['sensor-capabilities', id_sensor_model] }),
+    mutationFn: ({ id_sensor_model, id_variable }) =>
+      del(`/admin/sensor-capabilities/${id_sensor_model}/${id_variable}`),
+    onSuccess: (_, { id_sensor_model }) =>
+      qc.invalidateQueries({ queryKey: ['sensor-capabilities', id_sensor_model] }),
   })
 }
 

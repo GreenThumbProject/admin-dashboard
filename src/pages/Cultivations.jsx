@@ -1,5 +1,9 @@
 import { useState } from 'react'
-import { useCultivations, useCreateCultivation, useDevices, usePlantSpecies, useThresholds, useCreateThreshold, useUpdateThreshold } from '../api/cloudApi'
+import {
+  useCultivations, useCreateCultivation, useDevices, usePlantSpecies,
+  useThresholds, useCreateThreshold, useUpdateThreshold,
+  useVariables, useUnits, useGrowthPhases,
+} from '../api/cloudApi'
 
 export default function Cultivations() {
   const { data: cultivations, isLoading } = useCultivations()
@@ -96,26 +100,42 @@ export default function Cultivations() {
 }
 
 function ThresholdPanel({ cultivation }) {
-  const { data, isLoading } = useThresholds(cultivation.id_cultivation)
-  const createThreshold = useCreateThreshold()
-  const updateThreshold = useUpdateThreshold()
+  const { data, isLoading }    = useThresholds(cultivation.id_cultivation)
+  const { data: varsData }     = useVariables()
+  const { data: unitsData }    = useUnits()
+  const { data: phasesData }   = useGrowthPhases(cultivation.id_plant_species)
+  const createThreshold        = useCreateThreshold()
+  const updateThreshold        = useUpdateThreshold()
   const [showForm, setShowForm] = useState(false)
-  const [newT, setNewT] = useState({ id_variable: '', id_growth_phase: '', min_value: '', max_value: '' })
-  const [editing, setEditing] = useState(null)
-  const [draft, setDraft] = useState({})
+  const [newT, setNewT]        = useState({ id_variable: '', id_growth_phase: '', min_value: '', max_value: '', target_value: '' })
+  const [editing, setEditing]  = useState(null)
+  const [draft, setDraft]      = useState({})
 
-  const list = Array.isArray(data) ? data : (data?.data ?? [])
+  const list      = Array.isArray(data)       ? data       : (data?.data       ?? [])
+  const varList   = Array.isArray(varsData)   ? varsData   : (varsData?.data   ?? [])
+  const unitList  = Array.isArray(unitsData)  ? unitsData  : (unitsData?.data  ?? [])
+  const phaseList = Array.isArray(phasesData) ? phasesData : (phasesData?.data ?? [])
+
+  const unitMap  = Object.fromEntries(unitList.map(u => [u.id_unit, u.symbol]))
+  const varMap   = Object.fromEntries(varList.map(v => [
+    v.id_variable,
+    v.default_unit_id && unitMap[v.default_unit_id]
+      ? `${v.name} (${unitMap[v.default_unit_id]})`
+      : v.name,
+  ]))
+  const phaseMap = Object.fromEntries(phaseList.map(p => [p.id_growth_phase, p.name]))
 
   async function handleCreate(e) {
     e.preventDefault()
     await createThreshold.mutateAsync({
       id_cultivation: cultivation.id_cultivation,
       id_variable: Number(newT.id_variable),
-      id_growth_phase: Number(newT.id_growth_phase),
+      id_growth_phase: newT.id_growth_phase ? Number(newT.id_growth_phase) : undefined,
       min_value: newT.min_value ? Number(newT.min_value) : undefined,
       max_value: newT.max_value ? Number(newT.max_value) : undefined,
+      target_value: newT.target_value ? Number(newT.target_value) : undefined,
     })
-    setNewT({ id_variable: '', id_growth_phase: '', min_value: '', max_value: '' })
+    setNewT({ id_variable: '', id_growth_phase: '', min_value: '', max_value: '', target_value: '' })
     setShowForm(false)
   }
 
@@ -132,18 +152,41 @@ function ThresholdPanel({ cultivation }) {
 
       {showForm && (
         <form onSubmit={handleCreate} className="card grid grid-cols-2 gap-3">
-          {[
-            ['Variable ID', 'id_variable', 'number'],
-            ['Growth phase ID', 'id_growth_phase', 'number'],
-            ['Min value', 'min_value', 'number'],
-            ['Max value', 'max_value', 'number'],
-          ].map(([label, key, type]) => (
-            <div key={key}>
-              <label className="label text-xs">{label}</label>
-              <input type={type} value={newT[key]} className="input text-sm"
-                onChange={e => setNewT(n => ({ ...n, [key]: e.target.value }))} />
-            </div>
-          ))}
+          <div className="col-span-2">
+            <label className="label text-xs">Variable *</label>
+            <select value={newT.id_variable} required className="input text-sm"
+              onChange={e => setNewT(n => ({ ...n, id_variable: e.target.value }))}>
+              <option value="">Select variable…</option>
+              {varList.map(v => (
+                <option key={v.id_variable} value={v.id_variable}>{varMap[v.id_variable]}</option>
+              ))}
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="label text-xs">Growth phase</label>
+            <select value={newT.id_growth_phase} className="input text-sm"
+              onChange={e => setNewT(n => ({ ...n, id_growth_phase: e.target.value }))}>
+              <option value="">Any phase</option>
+              {phaseList.map(p => (
+                <option key={p.id_growth_phase} value={p.id_growth_phase}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label text-xs">Min value</label>
+            <input type="number" step="any" value={newT.min_value} className="input text-sm"
+              onChange={e => setNewT(n => ({ ...n, min_value: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label text-xs">Max value</label>
+            <input type="number" step="any" value={newT.max_value} className="input text-sm"
+              onChange={e => setNewT(n => ({ ...n, max_value: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label text-xs">Target value</label>
+            <input type="number" step="any" value={newT.target_value} className="input text-sm"
+              onChange={e => setNewT(n => ({ ...n, target_value: e.target.value }))} />
+          </div>
           <div className="col-span-2">
             <button type="submit" disabled={createThreshold.isPending} className="btn-primary text-sm">
               {createThreshold.isPending ? 'Adding…' : 'Add threshold'}
@@ -162,6 +205,7 @@ function ThresholdPanel({ cultivation }) {
                 <th className="th">Variable</th>
                 <th className="th">Phase</th>
                 <th className="th text-right">Min</th>
+                <th className="th text-right">Target</th>
                 <th className="th text-right">Max</th>
                 <th className="th text-center">Active</th>
                 <th className="th"></th>
@@ -170,16 +214,25 @@ function ThresholdPanel({ cultivation }) {
             <tbody className="divide-y divide-gray-800">
               {list.map(t => (
                 <tr key={t.id_threshold} className="bg-gray-950 hover:bg-gray-900">
-                  <td className="td">{t.id_variable}</td>
-                  <td className="td">{t.id_growth_phase}</td>
+                  <td className="td text-gray-300">
+                    {varMap[t.id_variable] ?? `#${t.id_variable}`}
+                    {t.id_species_threshold && (
+                      <span className="ml-1.5 text-xs text-brand-400 font-medium" title={`From template #${t.id_species_threshold}`}>template</span>
+                    )}
+                  </td>
+                  <td className="td text-gray-400">{t.id_growth_phase ? (phaseMap[t.id_growth_phase] ?? `#${t.id_growth_phase}`) : '—'}</td>
                   {editing === t.id_threshold ? (
                     <>
                       <td className="px-4 py-2">
-                        <input type="number" value={draft.min_value ?? ''} className="input w-20 text-right text-xs"
+                        <input type="number" step="any" value={draft.min_value ?? ''} className="input w-20 text-right text-xs"
                           onChange={e => setDraft(d => ({ ...d, min_value: e.target.value }))} />
                       </td>
                       <td className="px-4 py-2">
-                        <input type="number" value={draft.max_value ?? ''} className="input w-20 text-right text-xs"
+                        <input type="number" step="any" value={draft.target_value ?? ''} className="input w-20 text-right text-xs"
+                          onChange={e => setDraft(d => ({ ...d, target_value: e.target.value }))} />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input type="number" step="any" value={draft.max_value ?? ''} className="input w-20 text-right text-xs"
                           onChange={e => setDraft(d => ({ ...d, max_value: e.target.value }))} />
                       </td>
                       <td className="px-4 py-2 text-center">
@@ -201,6 +254,7 @@ function ThresholdPanel({ cultivation }) {
                   ) : (
                     <>
                       <td className="td text-right tabular-nums">{t.min_value ?? '—'}</td>
+                      <td className="td text-right tabular-nums">{t.target_value ?? '—'}</td>
                       <td className="td text-right tabular-nums">{t.max_value ?? '—'}</td>
                       <td className="td text-center">
                         <span className={t.is_active ? 'badge-green' : 'badge-gray'}>
@@ -209,7 +263,7 @@ function ThresholdPanel({ cultivation }) {
                       </td>
                       <td className="td">
                         <button className="btn-secondary text-xs px-2 py-1"
-                          onClick={() => { setEditing(t.id_threshold); setDraft({ min_value: t.min_value, max_value: t.max_value, is_active: t.is_active }) }}>
+                          onClick={() => { setEditing(t.id_threshold); setDraft({ min_value: t.min_value, max_value: t.max_value, target_value: t.target_value, is_active: t.is_active }) }}>
                           Edit
                         </button>
                       </td>

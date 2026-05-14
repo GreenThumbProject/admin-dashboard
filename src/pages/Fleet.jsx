@@ -68,9 +68,17 @@ export default function Fleet() {
                     {d.last_seen_at ? new Date(d.last_seen_at).toLocaleString() : '—'}
                   </td>
                   <td className="td">
-                    <Link to={`/devices?open=${d.id_device}`} className="btn-secondary text-xs px-3 py-1">
-                      View
-                    </Link>
+                    <div className="flex gap-2 items-center">
+                      <Link to={`/devices?open=${d.id_device}`} className="btn-secondary text-xs px-3 py-1">
+                        View
+                      </Link>
+                      {d.tailscale_ip && (
+                        <a href={`http://${d.tailscale_ip}:80`} target="_blank" rel="noreferrer"
+                           className="btn-secondary text-xs px-3 py-1">
+                          Local ↗
+                        </a>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

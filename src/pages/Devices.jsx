@@ -482,12 +482,20 @@ export default function Devices() {
                         {d.last_seen_at ? new Date(d.last_seen_at).toLocaleString() : '—'}
                       </td>
                       <td className="td">
-                        <button
-                          onClick={() => toggleDetail(d.id_device)}
-                          className="btn-secondary text-xs px-3 py-1"
-                        >
-                          {expandedId === d.id_device ? 'Close' : 'Details'}
-                        </button>
+                        <div className="flex gap-2 items-center">
+                          <button
+                            onClick={() => toggleDetail(d.id_device)}
+                            className="btn-secondary text-xs px-3 py-1"
+                          >
+                            {expandedId === d.id_device ? 'Close' : 'Details'}
+                          </button>
+                          {d.tailscale_ip && (
+                            <a href={`http://${d.tailscale_ip}:80`} target="_blank" rel="noreferrer"
+                               className="btn-secondary text-xs px-3 py-1">
+                              Dashboard ↗
+                            </a>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     {expandedId === d.id_device && (
