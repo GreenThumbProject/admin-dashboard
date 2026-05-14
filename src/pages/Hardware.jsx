@@ -158,8 +158,8 @@ function SensorModelSection() {
   const [show, setShow]     = useState(false)
   const [expandedId, setExpandedId] = useState(null)
   const [editingId, setEditingId]   = useState(null)
-  const [editForm, setEditForm]     = useState({ model_name: '', manufacturer: '' })
-  const [form, setForm]     = useState({ model_name: '', manufacturer: '' })
+  const [editForm, setEditForm] = useState({ model_name: '', manufacturer: '', connection_type: '' })
+  const [form, setForm]       = useState({ model_name: '', manufacturer: '', connection_type: '' })
 
   const items     = Array.isArray(data)      ? data      : (data?.data      ?? [])
   const varList   = Array.isArray(varsData)  ? varsData  : (varsData?.data  ?? [])
@@ -168,7 +168,7 @@ function SensorModelSection() {
   async function handleCreate(e) {
     e.preventDefault()
     await createModel.mutateAsync(form)
-    setForm({ model_name: '', manufacturer: '' })
+    setForm({ model_name: '', manufacturer: '', connection_type: '' })
     setShow(false)
   }
 
@@ -193,6 +193,16 @@ function SensorModelSection() {
             <input value={form.manufacturer} onChange={e => setForm(f => ({ ...f, manufacturer: e.target.value }))}
               className="input" placeholder="Adafruit" />
           </div>
+          <div>
+            <label className="label">Connection type</label>
+            <select value={form.connection_type} onChange={e => setForm(f => ({ ...f, connection_type: e.target.value }))}
+              className="input">
+              <option value="">—</option>
+              {['I2C', 'SPI', 'UART', 'Analog', 'Digital', '1-Wire'].map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
           <button type="submit" disabled={createModel.isPending} className="btn-primary text-xs">
             {createModel.isPending ? 'Saving…' : 'Create'}
           </button>
@@ -209,6 +219,7 @@ function SensorModelSection() {
                 <th className="th">ID</th>
                 <th className="th">Model</th>
                 <th className="th">Manufacturer</th>
+                <th className="th">Connection</th>
                 <th className="th"></th>
               </tr>
             </thead>
@@ -219,6 +230,7 @@ function SensorModelSection() {
                     <td className="td text-gray-500">{m.id_sensor_model}</td>
                     <td className="td text-gray-200">{m.model_name}</td>
                     <td className="td text-gray-400">{m.manufacturer ?? '—'}</td>
+                    <td className="td text-gray-400">{m.connection_type ?? '—'}</td>
                     <td className="td text-right space-x-3">
                       <button
                         onClick={() => setExpandedId(v => v === m.id_sensor_model ? null : m.id_sensor_model)}
@@ -229,7 +241,7 @@ function SensorModelSection() {
                       <button
                         onClick={() => {
                           setEditingId(v => v === m.id_sensor_model ? null : m.id_sensor_model)
-                          setEditForm({ model_name: m.model_name, manufacturer: m.manufacturer ?? '' })
+                          setEditForm({ model_name: m.model_name, manufacturer: m.manufacturer ?? '', connection_type: m.connection_type ?? '' })
                         }}
                         className="text-xs text-blue-500 hover:text-blue-400"
                       >
@@ -266,6 +278,17 @@ function SensorModelSection() {
                               onChange={e => setEditForm(f => ({ ...f, manufacturer: e.target.value }))}
                               className="input text-xs" />
                           </div>
+                          <div>
+                            <label className="label">Connection</label>
+                            <select value={editForm.connection_type}
+                              onChange={e => setEditForm(f => ({ ...f, connection_type: e.target.value }))}
+                              className="input text-xs">
+                              <option value="">—</option>
+                              {['I2C', 'SPI', 'UART', 'Analog', 'Digital', '1-Wire'].map(t => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
+                          </div>
                           <button type="submit" disabled={updateModel.isPending} className="btn-primary text-xs">
                             {updateModel.isPending ? 'Saving…' : 'Save'}
                           </button>
@@ -299,7 +322,7 @@ function ActuatorModelSection() {
   const createModel    = useCreateActuatorModel()
   const deleteModel    = useDeleteActuatorModel()
   const [show, setShow] = useState(false)
-  const [form, setForm] = useState({ model_name: '', actuator_type: '', manufacturer: '', model_config_json: '{}' })
+  const [form, setForm] = useState({ model_name: '', actuator_type: '', manufacturer: '', connection_type: '', power_w: '', voltage_v: '', model_config_json: '{}' })
   const [jsonError, setJsonError] = useState(null)
 
   const items = Array.isArray(data) ? data : (data?.data ?? [])
@@ -309,8 +332,13 @@ function ActuatorModelSection() {
     let parsed
     try { parsed = JSON.parse(form.model_config_json) } catch { setJsonError('Invalid JSON'); return }
     setJsonError(null)
-    await createModel.mutateAsync({ ...form, model_config_json: parsed })
-    setForm({ model_name: '', actuator_type: '', manufacturer: '', model_config_json: '{}' })
+    await createModel.mutateAsync({
+      ...form,
+      power_w:           form.power_w   !== '' ? Number(form.power_w)   : undefined,
+      voltage_v:         form.voltage_v !== '' ? Number(form.voltage_v) : undefined,
+      model_config_json: parsed,
+    })
+    setForm({ model_name: '', actuator_type: '', manufacturer: '', connection_type: '', power_w: '', voltage_v: '', model_config_json: '{}' })
     setShow(false)
   }
 
@@ -341,6 +369,28 @@ function ActuatorModelSection() {
               <input value={form.manufacturer} onChange={e => setForm(f => ({ ...f, manufacturer: e.target.value }))}
                 className="input" placeholder="Noctua" />
             </div>
+            <div>
+              <label className="label">Connection type</label>
+              <select value={form.connection_type} onChange={e => setForm(f => ({ ...f, connection_type: e.target.value }))}
+                className="input">
+                <option value="">—</option>
+                {['USB', '3PIN', 'I2C', 'PWM', 'Relay', 'UART', 'SPI'].map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Power (W)</label>
+              <input type="number" step="0.01" value={form.power_w}
+                onChange={e => setForm(f => ({ ...f, power_w: e.target.value }))}
+                className="input" placeholder="5" />
+            </div>
+            <div>
+              <label className="label">Voltage (V)</label>
+              <input type="number" step="0.1" value={form.voltage_v}
+                onChange={e => setForm(f => ({ ...f, voltage_v: e.target.value }))}
+                className="input" placeholder="12" />
+            </div>
           </div>
           <div>
             <label className="label">Model config (JSON — shared specs for all instances)</label>
@@ -360,6 +410,9 @@ function ActuatorModelSection() {
         { key: 'model_name',        label: 'Model' },
         { key: 'actuator_type',     label: 'Type' },
         { key: 'manufacturer',      label: 'Manufacturer' },
+        { key: 'connection_type',   label: 'Connection', render: v => v ?? '—' },
+        { key: 'power_w',           label: 'Power (W)',  render: v => v != null ? `${v} W` : '—' },
+        { key: 'voltage_v',         label: 'Voltage (V)', render: v => v != null ? `${v} V` : '—' },
         { key: '_actions', label: '', render: (_, row) => (
           <button onClick={() => deleteModel.mutateAsync(row.id_actuator_model)}
             className="text-xs text-red-500 hover:text-red-400">Delete</button>

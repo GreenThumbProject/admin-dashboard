@@ -26,8 +26,14 @@ async function apiFetch(path, options = {}) {
     throw new Error('Unauthorized')
   }
   if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText)
-    throw new Error(`${res.status} ${text}`)
+    let message = `${res.status} ${res.statusText}`
+    try {
+      const body = await res.json()
+      if (body?.detail) message = body.detail
+    } catch {
+      message = await res.text().catch(() => res.statusText) || message
+    }
+    throw new Error(message)
   }
   if (res.status === 204) return null
   return res.json()
@@ -322,8 +328,24 @@ export function usePhotos({ deviceId, cultivationId } = {}) {
 // Hardware catalog
 // ---------------------------------------------------------------------------
 export function useSensorModels()   { return useQuery({ queryKey: ['sensor-models'],   queryFn: () => get('/admin/sensor-models')   }) }
-export function useActuatorModels() { return useQuery({ queryKey: ['actuator-models'], queryFn: () => get('/admin/actuator-models') }) }
-export function useVariables()      { return useQuery({ queryKey: ['variables'],        queryFn: () => get('/admin/variables')        }) }
+export function useActuatorModels() {
+  return useQuery({
+    queryKey: ['actuator-models'],
+    queryFn: () => get('/admin/actuator-models'),
+    select: (data) => [...(Array.isArray(data) ? data : (data?.data ?? []))].sort((a, b) =>
+      a.actuator_type.localeCompare(b.actuator_type)
+    ),
+  })
+}
+export function useVariables() {
+  return useQuery({
+    queryKey: ['variables'],
+    queryFn: () => get('/admin/variables'),
+    select: (data) => [...(Array.isArray(data) ? data : (data?.data ?? []))].sort((a, b) =>
+      a.name.localeCompare(b.name)
+    ),
+  })
+}
 export function useUnits()          { return useQuery({ queryKey: ['units'],            queryFn: () => get('/admin/units')            }) }
 
 export function useCreateSensorModel() {

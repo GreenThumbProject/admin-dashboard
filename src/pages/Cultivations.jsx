@@ -14,9 +14,12 @@ export default function Cultivations() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ id_device: '', id_plant_species: '', notes: '' })
 
-  const list       = Array.isArray(cultivations) ? cultivations : (cultivations?.data ?? [])
-  const deviceList = Array.isArray(devices)  ? devices  : (devices?.data  ?? [])
-  const speciesList = Array.isArray(species) ? species : (species?.data ?? [])
+  const list        = Array.isArray(cultivations) ? cultivations : (cultivations?.data ?? [])
+  const deviceList  = Array.isArray(devices)      ? devices      : (devices?.data      ?? [])
+  const speciesList = Array.isArray(species)      ? species      : (species?.data      ?? [])
+
+  const deviceMap  = Object.fromEntries(deviceList.map(d => [d.id_device, d.name]))
+  const speciesMap = Object.fromEntries(speciesList.map(s => [s.id_plant_species, s.name]))
 
   async function handleCreate(e) {
     e.preventDefault()
@@ -63,6 +66,9 @@ export default function Cultivations() {
           <button type="submit" disabled={createCultivation.isPending} className="btn-primary">
             {createCultivation.isPending ? 'Creating…' : 'Start cultivation'}
           </button>
+          {createCultivation.isError && (
+            <p className="text-xs text-red-400">{createCultivation.error.message}</p>
+          )}
         </form>
       )}
 
@@ -79,6 +85,10 @@ export default function Cultivations() {
               }`}
             >
               <div className="font-medium text-sm text-gray-200">Cultivation #{c.id_cultivation}</div>
+              <div className="text-xs text-gray-400">
+                {speciesMap[c.id_plant_species] ?? '—'}
+                {' · '}{deviceMap[c.id_device] ?? `Device ${c.id_device}`}
+              </div>
               <div className="text-xs text-gray-500">
                 {c.end_date ? 'Ended' : <span className="text-brand-400">Active</span>}
                 {' · '}{c.start_date ? new Date(c.start_date).toLocaleDateString() : '—'}

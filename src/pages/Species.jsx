@@ -29,7 +29,7 @@ export default function Species() {
   const deletePhase  = useDeleteGrowthPhase()
 
   const list      = Array.isArray(data)   ? data   : (data?.data   ?? [])
-  const phaseList = Array.isArray(phases) ? phases.filter(p => !p.is_default) : []
+  const phaseList = Array.isArray(phases) ? phases : []
   const varList   = Array.isArray(varsData)  ? varsData  : (varsData?.data  ?? [])
   const unitList  = Array.isArray(unitsData) ? unitsData : (unitsData?.data ?? [])
 
